@@ -157,7 +157,6 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
         return len(self.df)
 
     def plot_sample(self, i):
-        import matplotlib.pyplot as plt
         sample = self[i]
         image = sample['raw_image']
         plt.figure(dpi=72)
@@ -177,20 +176,21 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
             raise NotImplementedError
 
         # support special numpy type
-        image = skimage.img_as_ubyte(image)
-        image = image.copy()
+        # img_as_ubyte: 0-255
+	image = skimage.img_as_ubyte(image)
+        # regenerate an image for ensure bug
+	image = image.copy()
         raw_image = image
 
         # convert to tensor and normalize
-        image = self.to_tensor(image)
+        # double -> float 
+	image = self.to_tensor(image)
         image = self.normalize(image)
-        image = image.float()
-
         label = sample['item_id']
 
         ret = {
-            'image': image,
-            'raw_image': raw_image,
-            'label': label
+            'image': image, #tensor image for network to train
+            'raw_image': raw_image, # raw image for plt to draw
+            'label': label #classification
         }
         return ret
