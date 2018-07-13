@@ -162,6 +162,12 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
         plt.figure(dpi=72)
         plt.imshow(image)
 
+    def get_sample(self, i):
+        sample = self[i]
+        image = sample['image']
+        return image
+
+
     def __getitem__(self, i):
         sample = self.df.iloc[i]
         image = io.imread(sample['image_name'])
