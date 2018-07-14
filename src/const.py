@@ -1,17 +1,23 @@
-import time
-import torch
-name = time.strftime('%m-%d %H:%M:%S', time.localtime())
+import time as _time
+import torch as _torch
+from src.networks import FashionEmbedding as _net
 
+_name = 'vgg'
+_time = _time.strftime('%m-%d %H:%M:%S', _time.localtime())
 
-base_path = '/home/jyliu/try-on-codes'
-#TRAIN_DIR = 'runs/' + name
-#VAL_DIR = 'runs/' + name
+NUM_CLASSES = 12923
 
+USE_NET = _net
+# log 
+TRAIN_DIR = 'runs/%s/' % _name + _time
+VAL_DIR = 'runs/%s/' % _name + _time
 
-USE_NET = 'vgg16'
-MODEL_NAME = USE_NET+'.pkl'
+MODEL_NAME = '%s.pkl' % _name
 
-NUM_EPOCH = 20
-LEARNING_RATE = 0.0001
-LEARNING_RATE_DECAY = 0.9
-BATCH_SIZE = 16
+device = _torch.device('cuda:0' if _torch.cuda.is_available() else 'cpu')
+
+BATCH_SIZE = 32
+VAL_BATCH_SIZE = 32
+LEARNING_RATE = 0.001
+NUM_EPOCH = 50
+LEARNING_RATE_DECAY = 0.98

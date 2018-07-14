@@ -2,9 +2,7 @@
 import torch
 import torch.utils.data
 import numpy as np
-import cv2
 from torchvision import transforms
-import matplotlib.pyplot as plt
 import pandas as pd
 from skimage import io, transform
 import random
@@ -183,14 +181,14 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
 
         # support special numpy type
         # img_as_ubyte: 0-255
-	image = skimage.img_as_ubyte(image)
+        image = skimage.img_as_ubyte(image)
         # regenerate an image for ensure bug
-	image = image.copy()
+        image = image.copy()
         raw_image = image
 
         # convert to tensor and normalize
         # double -> float 
-	image = self.to_tensor(image)
+        image = self.to_tensor(image)
         image = self.normalize(image)
         label = sample['item_id']
 
