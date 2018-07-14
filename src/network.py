@@ -5,7 +5,7 @@ import math
 from dataset import DeepFashionInShopDataset
 import torchvision
 
-class VGGNet(nn.Module):
+class VGG(nn.Module):
 	def __init__(self, features, num_classes = 1000, init_weights = True):
 		super(VGGNet,self).__init__()
 		self.features = features
