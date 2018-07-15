@@ -4,21 +4,7 @@ import os
 from glob import glob
 import importlib
 from src import const
-import argparse
 
-
-parser = argparse.ArgumentParser("Center Loss Example")
-
-# optimization
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--lr_model', type=float, default=0.001, help="learning rate for model")
-parser.add_argument('--lr_cent', type=float, default=0.5, help="learning rate for center loss")
-parser.add_argument('--weight_cent', type=float, default=1, help="weight for center loss")
-parser.add_argument('--epoch', type=int, default=50)
-# model
-#parser.add_argument('--model', type=str, default='cnn')
-
-args = parser.parse_args()
 
 
 
