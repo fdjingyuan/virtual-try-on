@@ -4,27 +4,6 @@ from torch.nn import init
 import torchvision
 
 
-class ModuleWithAttr(nn.Module):
-
-    # 只能是数字，默认注册为0
-
-    def __init__(self, extra_info=['step']):
-        super(ModuleWithAttr, self).__init__()
-        for key in extra_info:
-            self.set_buffer(key, 0)
-
-    def set_buffer(self, key, value):
-        if not(hasattr(self, '__' + key)):
-            self.register_buffer('__' + key, torch.tensor(value))
-        setattr(self, '__' + key, torch.tensor(value))
-
-    def get_buffer(self, key):
-        if not(hasattr(self, '__' + key)):
-            raise Exception('no such key!')
-        return getattr(self, '__' + key).item()
-
-
-
 class VGG16Extractor(nn.Module):
     
     def __init__(self):
@@ -38,7 +17,7 @@ class VGG16Extractor(nn.Module):
             x = layer(x)
         return x
 
-class FashionEmbedding(ModuleWithAttr):
+class FashionEmbedding(nn.Module):
     
     def __init__(self, num_classes):
         super(FashionEmbedding, self).__init__()
