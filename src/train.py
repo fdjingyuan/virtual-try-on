@@ -7,7 +7,7 @@ import numpy as np
 from torch.nn import functional as F
 from src import const
 from scr.center_loss import CenterLoss
-from src.utils import parse_args_and_merge_const, get_train_test
+from src.utils import parse_args_and_merge_const, get_train_test, AverageMeter
 from tensorboardX import SummaryWriter
 import os
 
@@ -28,14 +28,18 @@ if __name__ == '__main__':
     net = const.USE_NET(const.NUM_CLASSES)
     net = net.to(const.device)  # 转移到cpu/gpu上
 
-    #center loss and parameters
-    center_loss = CenterLoss(const.NUM_CLASSES,2048,True)
-    params = list(net.parameters()) + list(center_loss.parameters())
-    
     #set learning rate and optimizer
     learning_rate = const.LEARNING_RATE
-    optimizer = torch.optim.SGD(params, lr=learning_rate)
-    #optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+
+    #center loss and parameters
+    criterion_xent = nn.CrossEntropyLoss()
+    criterion_cent = CenterLoss(num_classes=const.NUM_CLASSES, feat_dim=2048, use_gpu=True)
+    optimizer_model = torch.optim.SGD(net.parameters(), lr=learning_rate) 
+    optimizer_centloss = torch.optim.SGD(criterion_cent.parameters(), lr=learning_rate)
+
+    #center_loss = CenterLoss(const.NUM_CLASSES,2048,True)
+    #params = list(net.parameters()) + list(center_loss.parameters())
+    #optimizer = torch.optim.SGD(params, lr=learning_rate)
 
     #write to tensorboardX
     writer = SummaryWriter(const.TRAIN_DIR)
@@ -45,17 +49,38 @@ if __name__ == '__main__':
     criterion = center_loss
 
     for epoch in range(const.NUM_EPOCH):
-        net.train()
-        for i, sample in enumerate(train_dataloader):
-            step += 1
-            for key in sample:
-                sample[key] = sample[key].to(const.device)
-            output = net(sample['image'])
-            loss = criterion(output['output'], sample['label'])
+        print("==> Epoch {}/{}".format(epoch+1, const.NUM_EPOCH))
+        train(net,criterion_xent, criterion_cent,
+              optimizer_model, optimizer_centloss,
+              train_dataloader, const.NUM_CLASSES, epoch)
+        
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+
+
+
+
+
+
+
+
+
+def train(net, criterion_xent, criterion_cent, optimizer_model, optimizer_centloss,
+          trainloader, num_classes, epoch):       
+    net.train()
+    xent_losses = AverageMeter()
+    cent_losses = AverageMeter()
+    losses = AverageMeter()
+
+    for i, sample in enumerate(trainloader):
+        step += 1
+        for key in sample:
+            sample[key] = sample[key].to(const.device)
+        output = net(sample['image'])
+        loss = criterion(output['output'], sample['label'])
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
             if (i + 1) % 10 == 0:
                 writer.add_scalar('loss', loss.item(), step)
