@@ -6,6 +6,7 @@ from torch import nn
 import numpy as np
 from torch.nn import functional as F
 from src import const
+from scr.center_loss import CenterLoss
 from src.utils import parse_args_and_merge_const, get_train_test
 from tensorboardX import SummaryWriter
 import os
@@ -27,16 +28,22 @@ if __name__ == '__main__':
     net = const.USE_NET(const.NUM_CLASSES)
     net = net.to(const.device)  # 转移到cpu/gpu上
 
+    #center loss and parameters
+    center_loss = CenterLoss(const.NUM_CLASSES,2048,True)
+    params = list(net.parameters()) + list(center_loss.parameters())
+    
     #set learning rate and optimizer
     learning_rate = const.LEARNING_RATE
-    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(params, lr=learning_rate)
+    #optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
     #write to tensorboardX
     writer = SummaryWriter(const.TRAIN_DIR)
 
     total_step = len(train_dataloader)
     step = 0
-    criterion = nn.CrossEntropyLoss()
+    criterion = center_loss
+
     for epoch in range(const.NUM_EPOCH):
         net.train()
         for i, sample in enumerate(train_dataloader):
