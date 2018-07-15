@@ -54,7 +54,15 @@ if __name__ == '__main__':
               optimizer_model, optimizer_centloss,
               train_dataloader, const.NUM_CLASSES, epoch)
         
+        if (i + 1) % 10 == 0:
+            writer.add_scalar('loss', loss.item(), step)
+            writer.add_scalar('learning_rate', learning_rate, step)
+            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                  .format(epoch + 1, const.NUM_EPOCH, i + 1, total_step, loss.item()))
 
+        print('Saving Model....')
+        torch.save(net.state_dict(), 'models/' + const.MODEL_NAME)
+        print('OK. Now evaluate..')
 
 
 
@@ -75,37 +83,38 @@ def train(net, criterion_xent, criterion_cent, optimizer_model, optimizer_centlo
         step += 1
         for key in sample:
             sample[key] = sample[key].to(const.device)
+
         output = net(sample['image'])
-        loss = criterion(output['output'], sample['label'])
+        loss_xent = criterion_xent(output['output'], sample['label'])
+        loss_cent = criterion_cent(output['embedding'], sample['label'])
+        loss_cent *= const.WEIGHT_CENT
+        loss = loss_xent + loss_cent
 
-        optimizer.zero_grad()
+        optimizer_model.zero_grad()
+        optimizer_centloss.zero_grad()
         loss.backward()
-        optimizer.step()
+        optimizer_model.step()
+        for param in criterion_cent.parameters():
+            param.grad.data *= (1. / const.WEIGHT_CENT)
+        optimizer_centloss.step()
 
-            if (i + 1) % 10 == 0:
-                writer.add_scalar('loss', loss.item(), step)
-                writer.add_scalar('learning_rate', learning_rate, step)
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
-                      .format(epoch + 1, const.NUM_EPOCH, i + 1, total_step, loss.item()))
 
-        print('Saving Model....')
-        torch.save(net.state_dict(), 'models/' + const.MODEL_NAME)
-        print('OK. Now evaluate..')
+        
+def test(model, testloader, num_classes, epoch)
+    net.eval()  # eval mode (batchnorm uses moving mean/variance instead of mini-batch mean/variance)
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        for i, sample in enumerate(test_dataloader):
+            for key in sample:
+                sample[key] = sample[key].to(const.device)
+            output = net(sample['image'])['output']
+            _, predicted = torch.max(output.data, 1)
+            total += sample['label'].size(0)
+            correct += (predicted == sample['label']).sum().item()
 
-        net.eval()  # eval mode (batchnorm uses moving mean/variance instead of mini-batch mean/variance)
-        with torch.no_grad():
-            correct = 0
-            total = 0
-            for i, sample in enumerate(test_dataloader):
-                for key in sample:
-                    sample[key] = sample[key].to(const.device)
-                output = net(sample['image'])['output']
-                _, predicted = torch.max(output.data, 1)
-                total += sample['label'].size(0)
-                correct += (predicted == sample['label']).sum().item()
-
-            print('Test Accuracy: {:.2f}%'.format(100 * correct / total))
-            writer.add_scalar('accuracy', correct / total, step)
-        # learning rate decay
-        learning_rate *= const.LEARNING_RATE_DECAY
-        optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+        print('Test Accuracy: {:.2f}%'.format(100 * correct / total))
+        writer.add_scalar('accuracy', correct / total, step)
+    # learning rate decay
+    learning_rate *= const.LEARNING_RATE_DECAY
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
