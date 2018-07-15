@@ -53,7 +53,6 @@ if __name__ == '__main__':
                       .format(epoch + 1, const.NUM_EPOCH, i + 1, total_step, loss.item()))
 
         print('Saving Model....')
-        net.set_buffer('step', step)
         torch.save(net.state_dict(), 'models/' + const.MODEL_NAME)
         print('OK. Now evaluate..')
 
