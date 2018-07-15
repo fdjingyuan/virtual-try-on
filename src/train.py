@@ -16,18 +16,22 @@ if __name__ == '__main__':
     if os.path.exists('models') is False:
         os.makedirs('models')
 
-	train_df, test_df = get_train_test()
+    # get train, test dataloader
+    train_df, test_df = get_train_test()
     train_dataset = DeepFashionInShopDataset(train_df, 'RANDOM')
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=const.BATCH_SIZE, shuffle=True, num_workers=4)
     test_dataset = DeepFashionInShopDataset(test_df, 'CENTER')
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=const.VAL_BATCH_SIZE, shuffle=True, num_workers=4)
 
+    #get network
     net = const.USE_NET(const.NUM_CLASSES)
     net = net.to(const.device)  # 转移到cpu/gpu上
 
+    #set learning rate and optimizer
     learning_rate = const.LEARNING_RATE
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
+    #write to tensorboardX
     writer = SummaryWriter(const.TRAIN_DIR)
 
     total_step = len(train_dataloader)
