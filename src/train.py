@@ -5,26 +5,28 @@ import torch.utils.data
 from torch import nn
 import numpy as np
 from torch.nn import functional as F
+from src import utils
 from src import const
 from scr.center_loss import CenterLoss
-from src.utils import parse_args_and_merge_const, get_train_test, AverageMeter
+from src.utils import get_train_test
 from tensorboardX import SummaryWriter
 import os
 
 
-if __name__ == '__main__':
-    parse_args_and_merge_const()
+
+def main():
     if os.path.exists('models') is False:
         os.makedirs('models')
 
     # get train, test dataloader
     train_df, test_df = get_train_test()
     train_dataset = DeepFashionInShopDataset(train_df, 'RANDOM')
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=const.BATCH_SIZE, shuffle=True, num_workers=4)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     test_dataset = DeepFashionInShopDataset(test_df, 'CENTER')
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=const.VAL_BATCH_SIZE, shuffle=True, num_workers=4)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
     #get network
+    print("Creating model: {}".format(const.net_name))
     net = const.USE_NET(const.NUM_CLASSES)
     net = net.to(const.device)  # 转移到cpu/gpu上
 
@@ -49,16 +51,11 @@ if __name__ == '__main__':
     criterion = center_loss
 
     for epoch in range(const.NUM_EPOCH):
-        print("==> Epoch {}/{}".format(epoch+1, const.NUM_EPOCH))
         train(net,criterion_xent, criterion_cent,
               optimizer_model, optimizer_centloss,
               train_dataloader, const.NUM_CLASSES, epoch)
         
-        if (i + 1) % 10 == 0:
-            writer.add_scalar('loss', loss.item(), step)
-            writer.add_scalar('learning_rate', learning_rate, step)
-            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
-                  .format(epoch + 1, const.NUM_EPOCH, i + 1, total_step, loss.item()))
+        
 
         print('Saving Model....')
         torch.save(net.state_dict(), 'models/' + const.MODEL_NAME)
@@ -67,17 +64,9 @@ if __name__ == '__main__':
 
 
 
-
-
-
-
-
 def train(net, criterion_xent, criterion_cent, optimizer_model, optimizer_centloss,
           trainloader, num_classes, epoch):       
     net.train()
-    xent_losses = AverageMeter()
-    cent_losses = AverageMeter()
-    losses = AverageMeter()
 
     for i, sample in enumerate(trainloader):
         step += 1
@@ -98,6 +87,11 @@ def train(net, criterion_xent, criterion_cent, optimizer_model, optimizer_centlo
             param.grad.data *= (1. / const.WEIGHT_CENT)
         optimizer_centloss.step()
 
+        if (i + 1) % 10 == 0:
+            writer.add_scalar('loss', loss.item(), step)
+            writer.add_scalar('learning_rate', learning_rate, step)
+            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                  .format(epoch + 1, const.NUM_EPOCH, i + 1, total_step, loss.item()))
 
         
 def test(model, testloader, num_classes, epoch)
@@ -118,3 +112,7 @@ def test(model, testloader, num_classes, epoch)
     # learning rate decay
     learning_rate *= const.LEARNING_RATE_DECAY
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+
+
+if __name__ == '__main__':
+    main()

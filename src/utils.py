@@ -7,21 +7,19 @@ from src import const
 import argparse
 
 
-def merge_const(module_name):
-    new_conf = importlib.import_module(module_name)
-    for key, value in new_conf.__dict__.items():
-        if not(key.startswith('_')):
-            # const.__dict__[key] = value
-            setattr(const, key, value)
-            print('override', key, value)
+parser = argparse.ArgumentParser("Center Loss Example")
 
+# optimization
+parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--lr_model', type=float, default=0.001, help="learning rate for model")
+parser.add_argument('--lr_cent', type=float, default=0.5, help="learning rate for center loss")
+parser.add_argument('--weight_cent', type=float, default=1, help="weight for center loss")
+parser.add_argument('--epoch', type=int, default=50)
+# model
+#parser.add_argument('--model', type=str, default='cnn')
 
-def parse_args_and_merge_const():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', default='', type=str)
-    args = parser.parse_args()
-    if args.conf != '':
-        merge_const(args.conf)
+args = parser.parse_args()
+
 
 
 def get_train_test():
@@ -39,23 +37,3 @@ def get_train_test():
     test_df = pd.merge(df, test_id, on='item_id')
     return train_df, test_df
 
-
-class AverageMeter(object):
-    """Computes and stores the average and current value.
-       
-       Code imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
-    """
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
