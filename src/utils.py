@@ -27,9 +27,14 @@ def parse_args_and_merge_const():
 
 def get_train_test():
     df = pd.read_csv('data/info.csv')
-    df = df[df.clothes_type==1] # 选出上衣
-    df = df.sample(frac=1)
-
-    train_df = df.iloc[:int(len(df) * 0.9)]
-    test_df = df.iloc[int(len(df) * 0.9):]
+    # 取出上衣
+    df = df[df.clothes_type==1]
+    # item_id去重
+    item_id = df.item_id.drop_duplicates()
+    # 前80%item_id，并转dataframe
+    train_id = pd.DataFrame(item_id.iloc[:int(len(item_id) * 0.8)])
+    train_df = pd.merge(df, train_id, on='item_id')
+    # 后20%item_id，并转dataframe
+    test_id = pd.DataFrame(item_id.iloc[int(len(item_id) * 0.8):])
+    test_df = pd.merge(df, test_id, on='item_id')
     return train_df, test_df
