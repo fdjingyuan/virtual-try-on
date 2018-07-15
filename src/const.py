@@ -10,10 +10,10 @@ now_time = time.strftime('%m-%d %H:%M:%S', time.localtime())
 USE_NET = net
 
 NUM_CLASSES = 12923
-FETURE_EMBEDING = 2048
+FEATURE_EMBEDDING = 2048
 STEP_SIZE = 10
-WEIGHT_CENTOR = 1
-LEARNING_RATE_DECAY = 0.98
+WEIGHT_CENT = 1
+LEARNING_RATE_DECAY = 0.5
 
 # log 
 TRAIN_DIR = 'runs/%s/' % net_name + now_time
