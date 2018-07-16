@@ -4,7 +4,7 @@ import torch.utils.data
 import numpy as np
 from torchvision import transforms
 import pandas as pd
-from skimage import io, transform
+import cv2
 import random
 import skimage
 
@@ -93,7 +93,7 @@ class RandomRescale(object):
 
         new_h, new_w = int(new_h), int(new_w)
 
-        img = transform.resize(image, (new_h, new_w), mode='constant')
+        img = cv2.resize(image, (new_h, new_w))
 
         return img
 
@@ -123,7 +123,7 @@ class Rescale(object):
 
         new_h, new_w = int(new_h), int(new_w)
 
-        img = transform.resize(image, (new_h, new_w), mode='constant')
+        img = cv2.resize(image, (new_h, new_w))
 
         # h and w are swapped for landmarks because for images,
         # x and y axes are axis 1 and 0 respectively
@@ -155,6 +155,7 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
         return len(self.df)
 
     def plot_sample(self, i):
+        import matplotlib.pyplot as plt
         sample = self[i]
         image = sample['raw_image']
         plt.figure(dpi=72)
@@ -168,7 +169,8 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         sample = self.df.iloc[i]
-        image = io.imread(sample['image_name'])
+        image = cv2.imread(sample['image_name']) # h, w, c
+        #image = io.imread(sample['image_name'])
         if self.mode == 'RANDOM':
             image = self.rescale(image)
             image = self.random_crop(image)
@@ -181,10 +183,13 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
 
         # support special numpy type
         # img_as_ubyte: 0-255
-        image = skimage.img_as_ubyte(image)
+        #image = skimage.img_as_ubyte(image)
         # regenerate an image for ensure bug
+        # BGR2RGB转换
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = image.copy()
         raw_image = image
+
 
         # convert to tensor and normalize
         # double -> float 

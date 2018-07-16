@@ -70,10 +70,10 @@ def main():
               train_dataloader, const.NUM_CLASSES, epoch, writer, step)
         test(net, test_dataloader, const.NUM_CLASSES, epoch, writer, step)
         
-        step +=1
+        step += 1
+      
         print('Saving Model....')
-        torch.save(net.state_dict(), 'models/' + const.MODEL_NAME)
-    
+        torch.save(net.state_dict(), 'models/' + const.MODEL_NAME ) 
     print('Finished')
 
 
@@ -105,11 +105,10 @@ def train(net, criterion_xent, criterion_cent, optimizer_model, optimizer_centlo
                   .format(i+1, len(trainloader), loss.item(), loss_xent.item(), loss_cent.item()))
             
 
-
         
-def test(model, testloader, num_classes, epoch, step):
+def test(net, testloader, num_classes, epoch, writer, step):
     net.eval()  # eval mode (batchnorm uses moving mean/variance instead of mini-batch mean/variance)
-    correct, total = 0 , 0
+    correct, total = 0, 0
     with torch.no_grad():
         for i, sample in enumerate(testloader):
             for key in sample:

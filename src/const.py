@@ -18,7 +18,7 @@ LEARNING_RATE_DECAY = 0.5
 # log 
 TRAIN_DIR = 'runs/%s/' % net_name + now_time
 VAL_DIR = 'runs/%s/' % net_name + now_time
-MODEL_NAME = '%s.pkl' % net_name
+MODEL_NAME = '%s.pkl' % net_name + now_time
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
