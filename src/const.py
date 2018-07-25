@@ -1,6 +1,7 @@
 import time as time
 import torch as torch
-from src.networks import FashionEmbedding as net
+#from src.networks import FashionEmbedding as net
+from src.vae import VAE_FashionEmbedding as net 
 
 net_name = net.__name__
 now_time = time.strftime('%m-%d %H:%M:%S', time.localtime())

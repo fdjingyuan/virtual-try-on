@@ -1,212 +1,133 @@
+#coding: utf-8
+from src.dataset import DeepFashionInShopDataset
 import torch
-import torch.nn as nn
-from torch.nn import init
-import torchvision
+import torch.utils.data
+from torch import nn
+from torch.optim import lr_scheduler
+import numpy as np
+from torch.nn import functional as F
+from src import const
+from src.center_loss import CenterLoss
+from src.perceptual_loss import VGG_perceptual_loss_16
+from src.utils import get_train_test
+from tensorboardX import SummaryWriter
+import os
+import argparse
 
-def make_layers(cfg, batch_norm=True, in_channels = 3, norm = nn.BatchNorm2d):
-    layers = []
-    in_channels = in_channels
-    for v in cfg:
-        if v == 'M':
-            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-        elif isinstance(v, str):
-            if v[0] == 'D':
-                output_channels = int(v[1:])
-                conv = nn.ConvTranspose2d(in_channels, output_channels,
-                                            kernel_size=4, stride=2,padding=1)
-                if batch_norm:
-                    layers += [conv, norm(output_channels), nn.ReLU(inplace=True)]
-                else:
-                    layers += [conv, nn.ReLU(inplace=True)]
-                in_channels = output_channels
-            elif v[0] == 'T':
-                output_channels = int(v[1:])
-                conv = nn.Conv2d(in_channels, output_channels,
-                                            kernel_size=3, padding=1)
-                if batch_norm:
-                    layers += [conv, norm(output_channels), nn.Tanh()]
-                else:
-                    layers += [conv, nn.Tanh()]
-                in_channels = output_channels
-        else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
-            if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            in_channels = v
-    return nn.Sequential(*layers)
 
-def make_fc_layers(cfg, batch_norm=False, in_channels = 26):
-    layers = []
-    in_channels = in_channels
-    for v in cfg:
-        layers += [nn.Linear(in_channels, v), nn.BatchNorm1d(v), nn.ReLU()]
-        in_channels = v
-    return nn.Sequential(*layers)
+parser = argparse.ArgumentParser("embedding")
 
-class VGG16Extractor(nn.Module):
-    
-    def __init__(self):
-        super(VGG16Extractor, self).__init__()
-        # features: conv layers results
-        self.vgg = torchvision.models.vgg16(pretrained=True).features
+# optimization
+parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--lr_model', type=float, default=0.0001, help="learning rate for model")
+parser.add_argument('--lr_cent', type=float, default=0.5, help="learning rate for center loss")
+parser.add_argument('--lr_ploss', type=float, default=0.01, help="learning rate for perceptual loss")
+parser.add_argument('--epoch', type=int, default=50)
+# model
+#parser.add_argument('--model', type=str, default='cnn')
+#misc
+parser.add_argument('--print-freq', type=int, default=20)
 
-    def forward(self, x):
-        # a series of Conv2d ReLU MaxPool2d
-        for name, layer in self.vgg._modules.items():
-            x = layer(x)
-        return x
+args = parser.parse_args()
 
-class Decoder(nn.Module):
-    def __init__(self):
-        super(Decoder, self).__init__()
-        self.fc4 = nn.Linear(2048, 8 * 8 * 16)
-        self.fc_bn4 = nn.BatchNorm1d(8 * 8 * 16)
 
-        self.conv5 = nn.ConvTranspose2d(16, 32, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False)
-        self.bn5 = nn.BatchNorm2d(32)
-        self.conv6 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn6 = nn.BatchNorm2d(32)
-        self.conv7 = nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False)
-        self.bn7 = nn.BatchNorm2d(16)
-        self.conv8 = nn.ConvTranspose2d(16, 3, kernel_size=3, stride=1, padding=1, bias=False)
+def main():
+    if os.path.exists('models') is False:
+        os.makedirs('models')
 
-        self.relu = nn.ReLU() 
+    # get train, test dataloader
+    train_df, test_df = get_train_test()
+    train_dataset = DeepFashionInShopDataset(train_df, 'RANDOM')
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    test_dataset = DeepFashionInShopDataset(test_df, 'CENTER')
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    def decode(self, z):
-        fc4 = self.relu(self.fc_bn4(z).view(-1, 16, 8, 8)
+    #get network
+    print("Creating model: {}".format(const.net_name))
+    print("Batch_size:{}; Model learning rate:{}; Center learning rate:{}; Total Epoch:{}; "
+            .format(args.batch_size,args.lr_model,args.lr_cent,args.epoch))
+    net = const.USE_NET(const.NUM_CLASSES)
+    net = net.to(const.device)  # 转移到cpu/gpu上
+  
+    #center loss and parameters
+    criterion_xent = nn.CrossEntropyLoss()
+    criterion_cent = CenterLoss(num_classes=const.NUM_CLASSES, feat_dim=const.FEATURE_EMBEDDING, use_gpu=True)
+    criterion_pcent = VGG_perceptual_loss_16()
+  
+    optimizer_model = torch.optim.SGD(net.parameters(), lr=args.lr_model, weight_decay=5e-04, momentum=0.9)
+    optimizer_centloss = torch.optim.SGD(criterion_cent.parameters(), lr=args.lr_cent)
+    optimizer_ploss = torch.optim.SGD(criterion_pcent.parameters(), lr=args.lr_ploss)
 
-        conv5 = self.relu(self.bn5(self.conv5(fc4)))
-        conv6 = self.relu(self.bn6(self.conv6(conv5)))
-        conv7 = self.relu(self.bn7(self.conv7(conv6)))
-        return self.conv8(conv7).view(-1, 3, 32, 32)
+    #write to tensorboardX
+    writer = SummaryWriter(const.TRAIN_DIR)
 
-    def forward(self, z):
-        return self.decode(z) 
-
-class VGG_perceptual_loss_19_fashion(nn.Module):
-    def __init__(self):
-        super(VGG_perceptual_loss_19_fashion, self).__init__()
-        cfg1 = [64, 64]
-        cfg2 = ['M',128,128]
-        cfg3 = ['M',256,256]
-        cfg4 = [256,256,'M',512,512]
-        cfg5 = [512,512,'M',512,512]
-        self.net1 = make_layers(cfg1, False, 3)
-        self.net2 = make_layers(cfg2, False, 64)
-        self.net3 = make_layers(cfg3, False, 128)
-        self.net4 = make_layers(cfg4, False, 256)
-        self.net5 = make_layers(cfg5, False, 512)
-        model_url = 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'
-        state_dict = model_zoo.load_url(model_url)
-        keys = state_dict.keys()
-        self.init_weight(self.net1, state_dict, keys[0*2:2*2])
-        self.init_weight(self, keys[2*2:4*2])
-        self.init_weight(self.net3, state_dict, keys[4*2:6*2])
-        self.init_weight(self.net4, state_dict, keys[6*2:10*2])
-        self.init_weight(self.net5, state_dict, keys[10*2:14*2])
-        self.mean = Variable(torch.from_numpy(np.array([0.485, 0.456, 0.406])).reshape(1,3,1,1)).cuda(0).float()
-        self.var = Variable(torch.from_numpy(np.array([0.229, 0.224, 0.225])).reshape(1,3,1,1)).cuda(0).float()
+    scheduler = lr_scheduler.StepLR(optimizer_model, step_size=const.STEP_SIZE, gamma=const.LEARNING_RATE_DECAY)
+    step = 0
+    for epoch in range(args.epoch):
+        print("==> Epoch {}/{}".format(epoch+1, args.epoch))
+        train(net, criterion_xent, criterion_cent, criterion_pcent,
+              optimizer_model, optimizer_centloss, optimizer_ploss,
+              train_dataloader, const.NUM_CLASSES, epoch, writer, step)
+        test(net, test_dataloader, const.NUM_CLASSES, epoch, writer, step)
         
-    def init_weight(self, net, state_dict, keys):
-        length = len(keys)
-        i = 0
-        for m in net.modules():
-            if isinstance(m, nn.Conv2d):
-                m.weight.data = state_dict[keys[i]]
-                m.weight.bias = state_dict[keys[i + 1]]
-                i += 2
-
-    def get_feat(self, img):
-        if self.mean.get_device() != img.get_device():
-            self.mean = self.mean.cuda(img.get_device())
-            self.var = self.var.cuda(img.get_device())
-        img = ((img * 0.5 + 0.5) - self.mean) / self.var
-        feat1 = self.net1(img)
-        feat2 = self.net2(feat1)
-        feat3 = self.net3(feat2)
-#        feat4 = self.net4(feat3)
-#        feat5 = self.net5(feat4)
-        return [img, feat1, feat2, feat3]
-
-    def forward(self, img1, img2):
-        feat1_list = self.get_feat(img1)
-        feat2_list = self.get_feat(img2)
-        loss = 0
-        for i in range(len(feat1_list)):
-            loss += torch.abs(feat1_list[i] - feat2_list[i]).mean()
-#        loss += 20 * torch.abs(img1 - img2).mean()
-        return loss
-
-class VGG_perceptual_loss_16(nn.Module):
-    def __init__(self):
-        super(VGG_perceptual_loss_16, self).__init__()
-        cfg1 = [64, 64]
-        cfg2 = ['M',128,128]
-        cfg3 = ['M',256,256,256]
-        self.net1 = make_layers(cfg1, False, 3)
-        self.net2 = make_layers(cfg2, False, 64)
-        self.net3 = make_layers(cfg3, False, 128)
-        model_url = 'https://download.pytorch.org/models/vgg16-397923af.pth'
-        state_dict = model_zoo.load_url(model_url)
-        keys = state_dict.keys()
-        self.init_weight(self.net1, state_dict, keys[0:4])
-        self.init_weight(self.net2, state_dict, keys[4:8])
-        self.init_weight(self.net3, state_dict, keys[8:14])
-
-    def init_weight(self, net, state_dict, keys):
-        length = len(keys)
-        i = 0
-        for m in net.modules():
-            if isinstance(m, nn.Conv2d):
-                m.weight.data = state_dict[keys[i]]
-                m.weight.bias = state_dict[keys[i + 1]]
-                i += 2
-
-    def forward(self, img1, img2):
-        feat1_1 = self.net1(img1)
-        feat2_1 = self.net2(feat1_1)
-        feat3_1 = self.net3(feat2_1)
-        feat1_2 = self.net1(img2)
-        feat2_2 = self.net2(feat1_2)
-        feat3_2 = self.net3(feat2_2)
-        return torch.abs(feat1_1 - feat1_2).mean() + torch.abs(feat2_1 - feat2_2).mean() +  torch.abs(feat3_1 - feat3_2).mean()
-
-class FashionEmbedding(nn.Module):
-    
-    def __init__(self, num_classes):
-        super(FashionEmbedding, self).__init__()
-        self.vgg16_extractor = VGG16Extractor()
-        self.decoder = Decoder()
-        self.ploss = VGG_perceptual_loss_16()
-        self.embedding = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096), 
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(4096, 2048),
-        )
-        self.finalfc = nn.Sequential(
-            nn.Linear(2048, num_classes),
-        )
-
-    def forward(self, img, r):
-        x = self.vgg16_extractor(img)
-        # (batchsize, 512,7,7) -> (batchsize, 512*7*7)
-        x = x.reshape(x.shape[0], -1)
-        mu = self.embedding(x)
-        sigma = self.embedding(x)
-        embedding = mu + sigma * r
-        img_decoded = self.decoder(embedding) 
-        ploss = self.ploss(img, img_decoded)
-
-        finalfc = self.finalfc(embedding)
-        return {
-            'embedding': embedding,
-            'output': finalfc,
-            'decoded': img_decoded,
-            'ploss': ploss
-        }
+        step += 1
+      
+        print('Saving Model....')
+        torch.save(net.state_dict(), 'models/' + const.MODEL_NAME ) 
+    print('Finished')
 
 
+def train(net, criterion_xent, criterion_cent, criterion_pcent,
+          optimizer_model, optimizer_centloss, optimizer_ploss,
+          trainloader, num_classes, epoch, writer, step):       
+    net.train()
 
+    for i, sample in enumerate(trainloader):
+        for key in sample:
+            sample[key] = sample[key].to(const.device)
+        output = net(sample['image'])
+        loss_xent = criterion_xent(output['output'], sample['label'])
+        loss_cent = criterion_cent(output['embedding'], sample['label'])
+        loss_cent *= const.WEIGHT_CENT
+        loss_perc = criterion_pcent(output['decoded'],sample['image'])
+        loss_kld = output['KLD']
+
+        loss = loss_xent + loss_cent + loss_perc + loss_kld
+
+        optimizer_model.zero_grad()
+        optimizer_centloss.zero_grad()
+        optimizer_ploss.zero_grad()
+        loss.backward()
+        optimizer_model.step()
+        for param in criterion_cent.parameters():
+            param.grad.data *= (1. / const.WEIGHT_CENT)
+        optimizer_centloss.step()
+        optimizer_ploss.step()
+
+        if (i + 1) % args.print_freq == 0:
+            writer.add_scalar('loss', loss.item(), step)
+            writer.add_scalar('learning_rate', args.lr_model, step)
+            print("Batch {}/{}\t Loss {:.6f} \t XentLoss {:.6f} \t CenterLoss {:.6f} \t Ploss {:.6f}" \
+                  .format(i+1, len(trainloader), loss.item(), loss_xent.item(), loss_cent.item(), loss_perc.item()))
+            
+
+        
+def test(net, testloader, num_classes, epoch, writer, step):
+    net.eval()  # eval mode (batchnorm uses moving mean/variance instead of mini-batch mean/variance)
+    correct, total = 0, 0
+    with torch.no_grad():
+        for i, sample in enumerate(testloader):
+            for key in sample:
+                sample[key] = sample[key].to(const.device) #transfer to cuda(gpu)
+            output = net(sample['image'])['output']
+            feature = net(sample['image'])['embedding']
+            _, predicted = torch.max(output.data, 1)
+            total += sample['label'].size(0)
+            correct += (predicted == sample['label']).sum().item()
+
+        print('Test Accuracy: {:.2f}%'.format(100 * correct / total))
+        writer.add_scalar('accuracy', correct / total, step)
+
+
+if __name__ == '__main__':   
+    main()
