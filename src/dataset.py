@@ -193,13 +193,15 @@ class DeepFashionInShopDataset(torch.utils.data.Dataset):
 
         # convert to tensor and normalize
         # double -> float 
-        image = self.to_tensor(image)
-        image = self.normalize(image)
+        image_tensor = self.to_tensor(raw_image) # between 0~1 
+        # self.normalize is an inplace op so we use self.to_tensor to create a new tensor
+        image = self.normalize(self.to_tensor(image))
         label = sample['item_id']
 
         ret = {
             'image': image, #tensor image for network to train
             'raw_image': raw_image, # raw image for plt to draw
-            'label': label #classification
+            'label': label, #classification
+            'image_tensor': image_tensor, # tensor image between 0~1
         }
         return ret
